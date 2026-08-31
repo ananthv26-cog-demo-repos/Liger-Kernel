@@ -25,7 +25,8 @@ The outpost itself (`gpu-h100`, `outpost_env-4d276f55e8024d338ddba4fc68c36178`) 
 modal-devin defaults to `api.beta.devinenterprise.com`, which returns 403 for this org.
 
 Modal caches image layers by definition, so pushing new commits to this repo does not by itself
-refresh the prebaked checkout. Deploy with an explicit ref to rebuild that layer:
+refresh the prebaked checkout. Deploy with an explicit commit SHA (a branch name is rejected — it
+would keep the layer key stable while the branch moves) to rebuild that layer:
 
 ```bash
 OUTPOST_REPO_REF=$(git rev-parse HEAD) uv run modal deploy --strategy rolling outposts/gpu_h100.py

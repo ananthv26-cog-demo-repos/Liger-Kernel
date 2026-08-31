@@ -5,6 +5,7 @@ Generated once by modal-devin. This is application code and may be edited.
 
 import base64
 import os
+import re
 
 import modal
 
@@ -26,8 +27,11 @@ controller_image = worker.controller_image()
 REPO_URL = "https://github.com/ananthv26-cog-demo-repos/Liger-Kernel"
 REPO_DIR = "/root/workspace/Liger-Kernel"
 # Modal caches image layers by definition, so the clone layer only rebuilds when this changes.
-# Deploy with OUTPOST_REPO_REF=<sha or branch> to refresh the prebaked checkout.
+# Deploy with OUTPOST_REPO_REF=$(git rev-parse HEAD) to refresh the prebaked checkout; a full SHA
+# is required so the layer key moves with the code and cannot smuggle shell metacharacters.
 REPO_REF = os.environ.get("OUTPOST_REPO_REF", "main")
+if REPO_REF != "main" and not re.fullmatch(r"[0-9a-fA-F]{40}", REPO_REF):
+    raise ValueError("OUTPOST_REPO_REF must be a full 40-character commit SHA")
 
 # Versions the outpost is verified against; bump deliberately rather than floating.
 TORCH_VERSION = "2.13.0"
