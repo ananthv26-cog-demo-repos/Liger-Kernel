@@ -4,6 +4,7 @@ Generated once by modal-devin. This is application code and may be edited.
 """
 
 import base64
+import os
 
 import modal
 
@@ -24,6 +25,13 @@ controller_image = worker.controller_image()
 
 REPO_URL = "https://github.com/ananthv26-cog-demo-repos/Liger-Kernel"
 REPO_DIR = "/root/workspace/Liger-Kernel"
+# Modal caches image layers by definition, so the clone layer only rebuilds when this changes.
+# Deploy with OUTPOST_REPO_REF=<sha or branch> to refresh the prebaked checkout.
+REPO_REF = os.environ.get("OUTPOST_REPO_REF", "main")
+
+# Versions the outpost is verified against; bump deliberately rather than floating.
+TORCH_VERSION = "2.13.0"
+TRITON_VERSION = "3.7.1"
 
 DEVIN_BIN = "/root/.local/bin/devin"
 DEVIN_REAL_BIN = "/root/.local/share/devin/cli/_versions/current/bin/devin"
@@ -60,15 +68,20 @@ base_image = (
         f"rm -f {DEVIN_BIN}",
         f"echo {base64.b64encode(DEVIN_CLI_SHIM.encode()).decode()} | base64 -d > {DEVIN_BIN}",
         f"chmod 0755 {DEVIN_BIN}",
-        f"{DEVIN_BIN} worker start --help | grep -q -- '--pool'",
+        f"{DEVIN_BIN} worker start --help > /tmp/devin-worker-help"
+        " && grep -q -- '--session' /tmp/devin-worker-help"
+        " && grep -q -- '--pool' /tmp/devin-worker-help"
+        " && grep -q -- '--acceptor-id' /tmp/devin-worker-help"
+        " && grep -q 'DEVIN_REMOTE_SESSION_TOKEN' /tmp/devin-worker-help"
+        " && rm /tmp/devin-worker-help",
     )
     .apt_install("ffmpeg", "chromium")
     .env({"DEVIN_CHROME_PATH": "/usr/bin/chromium"})
     # Prebake the workload so a session starts on a warm checkout instead of a 10-minute
     # torch/triton install.
     .run_commands(
-        f"git clone {REPO_URL} {REPO_DIR}",
-        "pip install --no-cache-dir torch triton",
+        f"git clone {REPO_URL} {REPO_DIR} && git -C {REPO_DIR} checkout {REPO_REF}",
+        f"pip install --no-cache-dir torch=={TORCH_VERSION} triton=={TRITON_VERSION}",
         f'cd {REPO_DIR} && pip install --no-cache-dir -e ".[dev]"',
     )
 )
