@@ -24,6 +24,16 @@ The outpost itself (`gpu-h100`, `outpost_env-4d276f55e8024d338ddba4fc68c36178`) 
 `uvx modal-devin init gpu-h100 --api-url https://api.devin.ai`. Note the non-default `--api-url`:
 modal-devin defaults to `api.beta.devinenterprise.com`, which returns 403 for this org.
 
+Modal caches image layers by definition, so pushing new commits to this repo does not by itself
+refresh the prebaked checkout. Deploy with an explicit ref to rebuild that layer:
+
+```bash
+OUTPOST_REPO_REF=$(git rev-parse HEAD) uv run modal deploy --strategy rolling outposts/gpu_h100.py
+```
+
+Sessions can also just `git pull` in `/root/workspace/Liger-Kernel`; the prebaked checkout is a
+warm cache, not the source of truth.
+
 ## Using it
 
 Pick `gpu-h100` under Configuration → Virtual environment in the Devin webapp, or from Slack:
