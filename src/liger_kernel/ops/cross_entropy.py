@@ -105,7 +105,7 @@ def liger_cross_entropy_kernel(
         # set all X_ptr as 0
         for i in range(0, n_cols, BLOCK_SIZE):
             X_offsets = i + tl.arange(0, BLOCK_SIZE)
-            tl.store(X_ptr + X_offsets, 0.0, mask=X_offsets < n_cols)
+            tl.store(X_ptr + X_offsets, 0.0, mask=X_offsets < n_cols, eviction_policy="evict_first")
         # For ignored tokens, set token accuracy to 0
         if RETURN_TOKEN_ACCURACY:
             token_accuracy_ptr += program_id * token_accuracy_stride
@@ -134,6 +134,9 @@ def liger_cross_entropy_kernel(
 
     # Online softmax: 2 loads + 1 store (compared with 3 loads + 1 store for the safe softmax)
     # Refer to Algorithm 3 in the paper: https://arxiv.org/pdf/1805.02867
+    # Cache policy: the row is streamed twice, so first-pass loads are pinned in L2
+    # (evict_last) and second-pass loads/stores are streamed out (evict_first), so
+    # the second read is served from L2 instead of HBM whenever the resident rows fit.
 
     # 3. [Online softmax] first pass: find max + sum
     m = float("-inf")  # m is the max value. use the notation from the paper
@@ -154,6 +157,7 @@ def liger_cross_entropy_kernel(
             X_ptr + X_offsets,
             mask=X_offsets < n_cols,
             other=float("-inf"),
+            eviction_policy="evict_last",
             # Ensure float32 precision for softmax calculation
         ).cast(tl.float32)
         if HAS_SOFTCAPPING:
@@ -209,6 +213,7 @@ def liger_cross_entropy_kernel(
                 X_ptr + X_offsets,
                 mask=X_offsets < n_cols,
                 other=float("-inf"),
+                eviction_policy="evict_first",
                 # Ensure float32 precision for softmax calculation
             ).cast(tl.float32)
             if HAS_SOFTCAPPING:
@@ -249,7 +254,7 @@ def liger_cross_entropy_kernel(
             if HAS_SOFTCAPPING:
                 X_block = X_block * (1 - intermediate * intermediate)
 
-            tl.store(X_ptr + X_offsets, X_block, mask=X_offsets < n_cols)
+            tl.store(X_ptr + X_offsets, X_block, mask=X_offsets < n_cols, eviction_policy="evict_first")
 
         # dx_y correction: recompute the true-class gradient once, in fp32, and overwrite X[y]
         # (replaces the per-element tl.where removed above). The -(1 - label_smoothing) term must
